@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 from obspy import read
 from scipy.signal import butter, filtfilt
 import uuid
+from datetime import datetime, timedelta
+import random
 
 app = FastAPI()
 
@@ -72,7 +74,16 @@ def merge_activities(probabilities, sampling_rate, min_gap_seconds=1):
         segments.append(current_segment)
     return segments
 
-def save_activity(signal, probabilities, start_idx, end_idx, sampling_rate, activity_number):
+def random_date(start_date= datetime(2022, 1, 1), end_date= datetime(2024, 9, 30) ):
+    """Generate a random date between start_date and end_date."""
+    time_between_dates = end_date - start_date
+    days_between_dates = time_between_dates.days
+    random_number_of_days = random.randint(0, days_between_dates)
+    return start_date + timedelta(days=random_number_of_days)
+
+    # Define the start and end dates
+
+def save_activity(signal, probabilities, start_idx, end_idx, sampling_rate, now):
     activity_time = np.linspace(start_idx / sampling_rate, end_idx / sampling_rate, end_idx - start_idx + 1)
     plt.figure(figsize=(10, 8))
     plt.subplot(2, 1, 1)
@@ -90,12 +101,12 @@ def save_activity(signal, probabilities, start_idx, end_idx, sampling_rate, acti
     plt.grid()
 
     plt.tight_layout()
-    file_name = f"static/images/activity_combined_{activity_number}.png"
+    file_name = f"static/images/activity_{now}.png"
     plt.savefig(file_name)
     plt.close()
     return file_name
 
-def save_full_signal_and_probabilities(t, signal, probabilities):
+def save_full_signal_and_probabilities(t, signal, probabilities,now):
     plt.figure(figsize=(10, 8))
     plt.subplot(2, 1, 1)
     plt.plot(t, signal, color='blue')
@@ -110,9 +121,9 @@ def save_full_signal_and_probabilities(t, signal, probabilities):
     plt.xlabel('Time (s)')
     plt.ylabel('Probability (%)')
     plt.grid()
-
+    
     plt.tight_layout()
-    file_name = f"static/images/full_signal_with_probabilities.png"
+    file_name = f"static/images/full_signal_{now}.png"
     plt.savefig(file_name)
     plt.close()
     return file_name
@@ -140,9 +151,9 @@ async def upload_file(file: UploadFile = File(...)):
     probabilities = np.array([calculate_probability(np.abs(amp), constant_amplitude_threshold) for amp in filtered_signal])
     smoothed_probabilities = smooth_data(probabilities, window_size=500)
     segments = merge_activities(smoothed_probabilities, sampling_rate)
-
+    now = random_date().strftime("%Y-%m-%d")
     # Save full signal and probabilities
-    full_signal_file = save_full_signal_and_probabilities(t, filtered_signal, smoothed_probabilities)
+    full_signal_file = save_full_signal_and_probabilities(t, filtered_signal, smoothed_probabilities,now)
 
     # Save individual activities
     activities = []
@@ -152,7 +163,7 @@ async def upload_file(file: UploadFile = File(...)):
             end_idx = segment[-1]
             duration = (end_idx - start_idx + 1) / sampling_rate
             if duration >= 0.5:
-                activity_file = save_activity(filtered_signal, smoothed_probabilities, start_idx, end_idx, sampling_rate, activity_number)
+                activity_file = save_activity(filtered_signal, smoothed_probabilities, start_idx, end_idx, sampling_rate, now)
                 activities.append(activity_file)
     
     return {"message": "File processed successfully", "activities": activities, "full_signal": full_signal_file}
